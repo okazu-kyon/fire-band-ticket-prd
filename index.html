@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <base target="_top">
+  <title>受付用 QR照合システム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- QRスキャナーライブラリ (安定動作設定) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <!-- 高視認性Webユニバーサルデザインフォント（Noto Sans JP）の読み込み -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary-color: #8b7355;
+      --primary-hover: #6d5a42;
+      --accent-color: #b38636;
+      --bg-color: #f7f5f0;
+      --card-bg: #ffffff;
+      --text-main: #111111;
+      --text-sub: #444444;
+      --danger-color: #a00000;
+      --success-color: #1e7e34;
+      --warning-color: #d97706;
+      --border-color: #d1c7b7;
+    }
+
+    * {
+      box-sizing: border-box;
+      font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    body {
+      background: var(--bg-color);
+      background-image: radial-gradient(#d1c7b7 1.5px, transparent 1.5px);
+      background-size: 18px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      color: var(--text-main);
+    }
+
+    /* 起動時の受付スタッフ向け案内モーダル */
+    #startOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3000;
+      backdrop-filter: blur(3px);
+    }
+
+    #startGuideBox {
+      background: var(--card-bg);
+      width: 88%;
+      max-width: 380px;
+      padding: 22px;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      border: 2px solid var(--accent-color);
+      text-align: center;
+    }
+
+    #startGuideBox h2 {
+      margin-top: 0;
+      font-size: 1.25rem;
+      color: var(--primary-color);
+      border-bottom: 2px dashed var(--border-color);
+      padding-bottom: 10px;
+      font-weight: 900;
+    }
+
+    #startGuideBox p {
+      font-size: 0.9rem;
+      color: var(--text-sub);
+      line-height: 1.6;
+      margin: 15px 0 20px 0;
+      text-align: left;
+      font-weight: 700;
+    }
+
+    #btnCloseGuide {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary-color);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-weight: 900;
+      font-size: 1.05rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(139, 115, 85, 0.3);
+      transition: background 0.2s;
+    }
+    #btnCloseGuide:active {
+      background: var(--primary-hover);
+      transform: scale(0.97);
+    }
+
+    /* 上部エリア（カメラ＋ディスプレイ） */
+    .top-section {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 8px 12px 0 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ヘッダー周りの2段スマート化 (見切れ・崩れ完全防止) */
+    .app-header {
+      width: 100%;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      margin-bottom: 8px;
+      flex-shrink: 0;
+      z-index: 10;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+
+    .header-row1 {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-row2 {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 4px;
+      border-top: 1px dashed #e8e2d5;
+    }
+
+    .admin-title {
+      font-size: 14px;
+      font-weight: 900;
+      color: var(--primary-color);
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    /* リアルタイム来場者数カウンター (総入場数 / 総申込数) */
+    .visitor-counter-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--primary-color);
+      background: #f0eae1;
+      padding: 4px 10px;
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      white-space: nowrap;
+    }
+
+    /* モード切替ボタン (画面右上) */
+    .btn-mode-toggle {
+      font-size: 12.5px;
+      font-weight: 700;
+      background: var(--primary-color);
+      color: #ffffff;
+      border: 1.5px solid var(--accent-color);
+      padding: 5px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+    .btn-mode-toggle:active {
+      transform: scale(0.95);
+    }
+    .btn-mode-toggle.active-keypad {
+      background: var(--accent-color);
+      border-color: #ffffff;
+    }
+
+    .btn-switch-camera {
+      font-size: 11.5px;
+      background: #ffffff;
+      color: var(--primary-color);
+      border: 1px solid var(--border-color);
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* カメラプレビュー窓（デフォルトは画面いっぱい広々表示） */
+    .scanner-card {
+      width: 100%;
+      flex: 1;
+      min-height: 260px;
+      max-height: 440px;
+      background: #1a1a1a;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 6px;
+      position: relative;
+      border: 2px solid var(--border-color);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    #reader {
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+    }
+    #reader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+    }
+
+    /* 周囲の暗いマスクをなくし、クリアな画面に視認性の良い枠を表示 */
+    .scanner-overlay-guide {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 160px;
+      height: 160px;
+      border: 2.5px solid rgba(255, 255, 255, 0.95);
+      border-radius: 14px;
+      pointer-events: none;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.4);
+    }
+
+    .scanner-hint {
+      position: absolute;
+      bottom: 8px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 700;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+      pointer-events: none;
+    }
+
+    /* テンキーモード時のカメラコンパクト化 */
+    body.mode-keypad .scanner-card {
+      min-height: 100px;
+      max-height: 130px;
+    }
+
+    /* ディスプレイ表示 */
+    .display-box {
+      width: 100%;
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 6px;
+      padding: 4px 12px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      margin-bottom: 4px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1.5px solid var(--border-color);
+      color: var(--primary-color);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      transition: all 0.2s ease;
+    }
+
+    /* 通常スキャンモード時はディスプレイ・テンキーを非表示にしカメラを広々確保 */
+    body:not(.mode-keypad) .display-box {
+      display: none;
+    }
+
+    .status-msg {
+      font-size: 13.5px;
+      color: var(--text-sub);
+      margin-bottom: 4px;
+      height: 20px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 20px;
+    }
+
+    /* 下部固定テンキー (デフォルトは折りたたんで非表示) */
+    .bottom-keypad-container {
+      width: 100%;
+      background: var(--card-bg);
+      border-top: 1px solid var(--border-color);
+      padding: 8px 14px 18px 14px;
+      box-shadow: 0 -3px 12px rgba(0, 0, 0, 0.04);
+      display: none;
+    }
+
+    body.mode-keypad .bottom-keypad-container {
+      display: block;
+      animation: keyFade 0.2s ease-out;
+    }
+
+    @keyframes keyFade {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      max-width: 380px;
+      margin: 0 auto;
+    }
+
+    .btn-key {
+      font-size: 24px;
+      font-weight: 700;
+      padding: 9px 0;
+      background: #fdfbf7;
+      border: 1px solid var(--border-color);
+      color: var(--primary-color);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .btn-key:active { background: var(--accent-color); color: #ffffff; }
+    .btn-clear { background: #fffafa; border-color: #f2e3e3; color: var(--danger-color); font-size: 20px; font-weight: 700; }
+    .btn-bs { background: #fffdf5; border-color: var(--border-color); color: var(--warning-color); font-size: 20px; font-weight: 700; }
+
+    /* 照合結果ポップアップシート */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 1000;
+      display: none;
+      align-items: flex-end;
+      justify-content: center;
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-sheet {
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border-radius: 18px 18px 0 0;
+      padding: 18px 20px 24px 20px;
+      box-shadow: 0 -8px 25px rgba(0,0,0,0.25);
+      animation: slideUp 0.18s ease-out;
+      border-top: 3px solid var(--accent-color);
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
+    }
+
+    .modal-badge {
+      font-size: 15px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+    .modal-name {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--primary-color);
+      text-align: center;
+      margin: 2px 0 6px 0;
+    }
+    .modal-detail {
+      font-size: 18px;
+      color: var(--text-main);
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .btn-confirm-large {
+      width: 100%;
+      padding: 16px;
+      font-size: 20px;
+      font-weight: 700;
+      color: white;
+      background: var(--success-color);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 3px 10px rgba(30, 126, 52, 0.3);
+      margin-bottom: 12px;
+      transition: background 0.1s;
+    }
+    .btn-confirm-large:active { background: #165b26; }
+
+    .btn-modal-close {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-sub);
+      background: #f0ebe0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .sub-change-title { font-size: 13px; color: var(--text-sub); margin-bottom: 6px; font-weight: 700; }
+    .shortcut-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .btn-short {
+      flex: 1 1 calc(25% - 6px);
+      min-width: 50px;
+      padding: 10px 0;
+      font-size: 15px;
+      font-weight: 700;
+      background: #ffffff;
+      border: 1.5px solid var(--primary-color);
+      color: var(--primary-color);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-short:active { background: var(--primary-color); color: white; }
+
+    /* トーストポップアップ (下部エリア配置・高視認性大型ダイアログ) */
+    .toast-popup {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #6e583e;
+      color: #ffffff;
+      padding: 16px 18px;
+      border-radius: 16px;
+      border: 2px solid var(--accent-color);
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+      z-index: 2000;
+      width: calc(100% - 24px);
+      max-width: 450px;
+      line-height: 1.45;
+      animation: popInBottom 0.18s ease-out;
+      transition: opacity 0.2s ease-out;
+      cursor: pointer;
+    }
+    @keyframes popInBottom {
+      from { opacity: 0; transform: translate(-50%, 20%); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    .loading-locked {
+      pointer-events: none !important;
+      opacity: 0.5;
+      transition: opacity 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+
+<!-- 起動時の受付スタッフ向け案内モーダル -->
+<div id="startOverlay">
+  <div id="startGuideBox">
+    <h2>受付用 QR照合システム</h2>
+    <p id="startGuideText">
+      <strong>【受付スタッフ用のご案内】</strong><br>
+      この後、カメラの使用許可を求める画面が表示されます。<br>
+      QRコードを読み取るため、必ず<strong>「許可」</strong>を選択してください。
+    </p>
+    <button id="btnCloseGuide">カメラの許可へ進む（受付開始）</button>
+  </div>
+</div>
+
+<!-- 上部エリア（カメラ＋ディスプレイ） -->
+<div class="top-section">
+  <div class="app-header">
+    <div class="header-row1">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <div class="admin-title">受付用 照合システム</div>
+        <span id="syncStatusBadge" style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 10px; background: #e8f5e9; color: #1e7e34; border: 1px solid #c8e6c9;">🟢 通信OK</span>
+      </div>
+      <button type="button" id="btnToggleMode" class="btn-mode-toggle" onclick="toggleKeypadMode()">
+        <span>⌨️ 5桁番号で受付</span>
+      </button>
+    </div>
+    <div class="header-row2">
+      <!-- リアルタイムカウンター (総入場数 / 総申込数ベース) -->
+      <div id="visitorCounter" class="visitor-counter-badge"><span style="display:inline-block; transform:translateY(-1px);">👥</span> 総入場 / 総申込: 0 / 0名</div>
+      <button type="button" class="btn-switch-camera" id="btnSwitchCamera" onclick="toggleCameraFacing()">🔄 カメラ切替</button>
+    </div>
+  </div>
+
+  <!-- 常時カメラ読み取り窓（スキャンモード時は画面いっぱいに広々表示） -->
+  <div class="scanner-card">
+    <div id="reader"></div>
+    <div class="scanner-overlay-guide"></div>
+    <div class="scanner-hint">枠内にQRコードをかざしてください</div>
+  </div>
+
+  <div id="display" class="display-box">-----</div>
+  <div id="statusMsg" class="status-msg">📷 QRスキャン待機中</div>
+</div>
+
+<!-- 下部固定テンキー -->
+<div class="bottom-keypad-container">
+  <div class="keypad">
+    <button class="btn-key" onclick="pressKey('1')">1</button>
+    <button class="btn-key" onclick="pressKey('2')">2</button>
+    <button class="btn-key" onclick="pressKey('3')">3</button>
+    <button class="btn-key" onclick="pressKey('4')">4</button>
+    <button class="btn-key" onclick="pressKey('5')">5</button>
+    <button class="btn-key" onclick="pressKey('6')">6</button>
+    <button class="btn-key" onclick="pressKey('7')">7</button>
+    <button class="btn-key" onclick="pressKey('8')">8</button>
+    <button class="btn-key" onclick="pressKey('9')">9</button>
+    <button class="btn-key btn-clear" onclick="clearKey()">C</button>
+    <button class="btn-key" onclick="pressKey('0')">0</button>
+    <button class="btn-key btn-bs" onclick="backspaceKey()">⌫</button>
+  </div>
+</div>
+
+<!-- 照合結果ポップアップシート -->
+<div id="resultModal" class="modal-overlay">
+  <div class="modal-sheet">
+    <div id="modalBadge" class="modal-badge" style="color:var(--success-color);">【未受付】</div>
+    <div id="modalName" class="modal-name">--- 様</div>
+    <div id="modalDetail" class="modal-detail">一般 / 1名</div>
+
+    <div id="modalActionArea">
+      <button id="btnModalConfirm" class="btn-confirm-large" onclick="confirmCheckIn(currentData ? currentData.count : 1)">
+        🟢 <span id="modalBtnText">1名</span> で受付確定
+      </button>
+
+      <div id="modalShortArea">
+        <div class="sub-change-title">人数を変更して受付:</div>
+        <div id="modalShortcutGrid" class="shortcut-grid"></div>
+      </div>
+    </div>
+
+    <button class="btn-modal-close" onclick="closeResultModal()">閉じる（次のスキャンへ）</button>
+  </div>
+</div>
+
+<script>
+  const API_ENDPOINT = "https://script.google.com/macros/s/AKfycbyDQ3h_Vx72YPTgECxYYMUFUTtyQdgFsGtBlhSZrKReuKXFd3yDmcf2N15FnzgE8hgj4Q/exec";
+
+  let inputCode = "";
+  let currentData = null;
+  let isLoading = false;
+  let lastScannedCode = "";
+  let scanCooldownTimer = null;
+  let isKeypadMode = false;
+  let currentFacingMode = "environment";
+  let html5QrCode = null;
+
+  // ローカル優先照合・バックグラウンド自動同期用変数
+  let localMasterData = new Map();
+  let pendingSyncQueue = JSON.parse(localStorage.getItem('pendingSyncQueue') || '[]');
+  let isSyncing = false;
+
+  function toggleKeypadMode(forceMode) {
+    if (typeof forceMode === 'boolean') {
+      isKeypadMode = forceMode;
+    } else {
+      isKeypadMode = !isKeypadMode;
+    }
+
+    const body = document.body;
+    const toggleBtn = document.getElementById('btnToggleMode');
+    const statusMsg = document.getElementById('statusMsg');
+
+    if (isKeypadMode) {
+      body.classList.add('mode-keypad');
+      if (toggleBtn) {
+        toggleBtn.classList.add('active-keypad');
+        toggleBtn.innerHTML = '<span>📷 QRスキャンに戻る</span>';
+      }
+      if (statusMsg) statusMsg.innerText = '5桁の受付番号を入力してください';
+    } else {
+      body.classList.remove('mode-keypad');
+      if (toggleBtn) {
+        toggleBtn.classList.remove('active-keypad');
+        toggleBtn.innerHTML = '<span>⌨️ 5桁番号で受付</span>';
+      }
+      if (statusMsg) statusMsg.innerText = '📷 QRスキャン待機中';
+      clearKey();
+    }
+  }
+
+  // JSONPでGAS APIを呼び出す関数（CORS制約を完全回避）
+  function callGasApi(params, callbackSuccess, callbackFailure) {
+    const callbackName = 'gasCallback_' + Math.floor(Math.random() * 1000000);
+    params.callback = callbackName;
+
+    const queryString = Object.keys(params)
+      .map(k => encodeURIComponent(k) + '=' + encodeURIComponent(params[k]))
+      .join('&');
+    const script = document.createElement('script');
+    script.src = API_ENDPOINT + '?' + queryString;
+
+    window[callbackName] = function(data) {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      callbackSuccess(data);
+    };
+
+    script.onerror = function() {
+      delete window[callbackName];
+      document.body.removeChild(script);
+      if (callbackFailure) callbackFailure(new Error('通信に失敗しました'));
+    };
+
+    document.body.appendChild(script);
+  }
+
+  function setLock(lockState) {
+    isLoading = lockState;
+    const keypadContainer = document.querySelector('.bottom-keypad-container');
+    const modalAction = document.getElementById('modalActionArea');
+    if (lockState) {
+      if (keypadContainer) keypadContainer.classList.add('loading-locked');
+      if (modalAction) modalAction.classList.add('loading-locked');
+    } else {
+      if (keypadContainer) keypadContainer.classList.remove('loading-locked');
+      if (modalAction) modalAction.classList.remove('loading-locked');
+    }
+  }
+
+  function updateDisplay() {
+    const disp = document.getElementById('display');
+    if (disp) disp.innerText = inputCode ? inputCode.padEnd(5, '-') : "-----";
+    
+    if (inputCode.length === 5) {
+      searchCode();
+    }
+  }
+
+  function pressKey(num) {
+    if (isLoading) return;
+    if (!isKeypadMode) {
+      toggleKeypadMode(true);
+    }
+    if (inputCode.length < 5) {
+      inputCode += num;
+      updateDisplay();
+    }
+  }
+
+  function clearKey() {
+    inputCode = "";
+    updateDisplay();
+    const statusMsg = document.getElementById('statusMsg');
+    if (statusMsg) {
+      statusMsg.innerText = isKeypadMode ? '5桁の受付番号を入力してください' : '📷 QRスキャン待機中';
+    }
+  }
+
+  function backspaceKey() {
+    if (isLoading) return;
+    if (inputCode.length > 0) {
+      inputCode = inputCode.slice(0, -1);
+      updateDisplay();
+    }
+  }
+
+  // ステータスバッジ更新関数
+  function updateSyncStatusUI(statusType, count) {
+    const badge = document.getElementById('syncStatusBadge');
+    if (!badge) return;
+
+    if (statusType === 'online') {
+      badge.style.background = '#e8f5e9';
+      badge.style.color = '#1e7e34';
+      badge.style.borderColor = '#c8e6c9';
+      badge.innerText = '🟢 通信OK';
+    } else if (statusType === 'syncing') {
+      badge.style.background = '#e3f2fd';
+      badge.style.color = '#1565c0';
+      badge.style.borderColor = '#bbdefb';
+      badge.innerText = '🔵 同期中...';
+    } else if (statusType === 'offline' || count > 0) {
+      badge.style.background = '#fff3e0';
+      badge.style.color = '#d97706';
+      badge.style.borderColor = '#ffe0b2';
+      badge.innerText = '🟠 未送信 ' + count + '件';
+    }
+  }
+
+  // リアルタイムカウンター更新関数（総申込数・総入場数ベースに統一）
+  function updateVisitorCounter() {
+    let totalPeople = 0;     // 総申込数（人数ベース）
+    let checkedInPeople = 0; // 総入場数（実績入場人数ベース）
+
+    localMasterData.forEach(item => {
+      const ticketCount = Number(item.count) || 1;
+      totalPeople += ticketCount;
+
+      if (item.status === '受付済') {
+        checkedInPeople += (Number(item.actualCount) || ticketCount);
+      }
+    });
+
+    const counterEl = document.getElementById('visitorCounter');
+    if (counterEl) {
+      counterEl.innerHTML = `<span style="display:inline-block; transform:translateY(-1px);">👥</span> 総入場 / 総申込: ${checkedInPeople} / ${totalPeople}名`;
+    }
+  }
+
+  // ローカルキャッシュ初期化 & マスターデータ全件取得
+  function initLocalCache() {
+    const cached = localStorage.getItem('localMasterData');
+    if (cached) {
+      try {
+        const list = JSON.parse(cached);
+        localMasterData.clear();
+        list.forEach(item => {
+          localMasterData.set(String(item.code).trim(), item);
+        });
+        updateVisitorCounter();
+      } catch (e) {
+        console.error("キャッシュ解析エラー:", e);
+      }
+    }
+    fetchMasterData();
+  }
+
+  function fetchMasterData() {
+    callGasApi({ action: 'get_all' }, function(res) {
+      if (res && res.success && Array.isArray(res.data)) {
+        localMasterData.clear();
+        res.data.forEach(item => {
+          localMasterData.set(String(item.code).trim(), item);
+        });
+        localStorage.setItem('localMasterData', JSON.stringify(res.data));
+        updateVisitorCounter();
+        console.log('✅ マスターデータ更新完了: ' + localMasterData.size + '件');
+      }
+    }, function(err) {
+      console.warn('マスターデータ取得通信エラー。ローカルキャッシュで動作します。');
+    });
+  }
+
+  // 照合検索処理（ローカルキャッシュ優先照合：常時自動受付）
+  function searchCode() {
+    if (!inputCode) return;
+    const targetCode = inputCode;
+    inputCode = "";
+
+    const strCode = String(targetCode).trim();
+    let res = null;
+
+    if (localMasterData.has(strCode)) {
+      const cachedItem = localMasterData.get(strCode);
+      res = {
+        success: true,
+        code: cachedItem.code,
+        category: cachedItem.category,
+        nickname: cachedItem.nickname,
+        count: cachedItem.count,
+        status: cachedItem.status,
+        actualCount: cachedItem.actualCount
+      };
+    }
+
+    if (res && res.success) {
+      currentData = res;
+      
+      if (res.status === "未受付") {
+        // 未受付なら自動即時チェックイン＋バックグラウンド同期
+        confirmCheckInAuto(res);
+      } else if (res.status === "受付済") {
+        showAutoToast(
+          "⚠️ <span style='font-size:22px; font-weight:900; color:#ffffff; display:inline-block; margin-bottom:2px;'>" + (res.nickname || "") + " 様</span><br>" +
+          "<span style='font-size:18px; font-weight:700; color:#ffeb3b;'>受付完了済み（" + (res.actualCount || res.count || 1) + "名）</span><br>" +
+          "<span style='font-size:12.5px; opacity:0.95; font-weight:700; display:inline-block; margin-top:6px; background:rgba(0,0,0,0.25); padding:4px 12px; border-radius:12px;'>👇 タップで人数を変更・修正</span>",
+          5000,
+          true,
+          function() {
+            showResultModal(res);
+          }
+        );
+      } else if (res.status === "キャンセル") {
+        showAutoToast(
+          "❌ <span style='font-size:22px; font-weight:900; color:#ffffff; display:inline-block; margin-bottom:2px;'>" + (res.nickname || "") + " 様</span><br>" +
+          "<span style='font-size:18px; font-weight:700; color:#ff8a80;'>（キャンセル扱い）</span>",
+          3000,
+          true
+        );
+      }
+
+    } else {
+      showAutoToast("⚠️ <span style='font-size:18px;'>番号: " + targetCode + "</span><br><span style='font-size:16px;'>該当データがありません</span>", 3000, true);
+    }
+  }
+
+  // 自動即時チェックイン（ローカル更新 ＋ カウンター更新 ＋ 送信キュー追加）
+  function confirmCheckInAuto(data) {
+    const strCode = String(data.code).trim();
+    const actualCount = Number(data.count) || 1;
+
+    // 1. ローカルキャッシュのステータスを即座に「受付済」へ変更
+    if (localMasterData.has(strCode)) {
+      const item = localMasterData.get(strCode);
+      item.status = '受付済';
+      item.actualCount = actualCount;
+      localMasterData.set(strCode, item);
+      localStorage.setItem('localMasterData', JSON.stringify(Array.from(localMasterData.values())));
+      updateVisitorCounter(); // カウンター即時更新
+    }
+
+    // 2. バックグラウンド送信キューに追加
+    pendingSyncQueue.push({ code: strCode, count: actualCount });
+    localStorage.setItem('pendingSyncQueue', JSON.stringify(pendingSyncQueue));
+
+    // 照合確定音「ピ・ローン♪」を発音
+    playBeepSound();
+
+    // 3. 即時成功表示（タップで人数変更ダイアログ起動可能）
+    showAutoToast(
+      "✅ <span style='font-size:22px; font-weight:900; color:#ffffff; display:inline-block; margin-bottom:2px;'>" + data.nickname + " 様</span><br>" +
+      "<span style='font-size:19px; font-weight:900; color:#ffeb3b;'>（" + data.count + "名）受付完了！</span><br>" +
+      "<span style='font-size:12.5px; opacity:0.95; font-weight:700; display:inline-block; margin-top:6px; background:rgba(0,0,0,0.25); padding:4px 12px; border-radius:12px;'>👇 タップで人数を変更・修正</span>",
+      5000,
+      false,
+      function() {
+        showResultModal(data);
+      }
+    );
+    if (isKeypadMode) clearKey();
+
+    // 4. バックグラウンド同期起動
+    triggerBackgroundSync();
+  }
+
+  function showResultModal(res) {
+    const modal = document.getElementById('resultModal');
+    const badge = document.getElementById('modalBadge');
+    const name = document.getElementById('modalName');
+    const detail = document.getElementById('modalDetail');
+    const actionArea = document.getElementById('modalActionArea');
+    const shortArea = document.getElementById('modalShortArea');
+    const grid = document.getElementById('modalShortcutGrid');
+
+    name.innerText = (res.nickname || "ご来場者") + " 様";
+    detail.innerText = (res.category || "一般") + " / " + (res.count || 1) + "名";
+
+    if (res.status === "キャンセル") {
+      badge.innerText = "【キャンセル済み】";
+      badge.style.color = "var(--danger-color)";
+      actionArea.style.display = 'none';
+    } else {
+      if (res.status === "受付済") {
+        badge.innerText = "【受付完了済み（入場: " + (res.actualCount || res.count || 1) + "名）】";
+        badge.style.color = "var(--warning-color)";
+      } else {
+        badge.innerText = "【未受付】";
+        badge.style.color = "var(--success-color)";
+      }
+
+      actionArea.style.display = 'block';
+      document.getElementById('modalBtnText').innerText = (res.count || 1) + "名";
+
+      const maxCount = parseInt(res.count, 10) || 1;
+      grid.innerHTML = "";
+      shortArea.style.display = 'block';
+
+      const limit = Math.max(maxCount, 4);
+      for (let i = 1; i <= limit; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-short';
+        btn.innerText = i + '名';
+        btn.onclick = function() { confirmCheckIn(i); };
+        grid.appendChild(btn);
+      }
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  function closeResultModal() {
+    document.getElementById('resultModal').style.display = 'none';
+    inputCode = "";
+    lastScannedCode = "";
+    updateDisplay();
+  }
+
+  // モーダル等からの手動人数変更・受付確定
+  function confirmCheckIn(count) {
+    if (isLoading || !currentData) return;
+    const strCode = String(currentData.code).trim();
+    const actualCount = Number(count) || 1;
+
+    if (localMasterData.has(strCode)) {
+      const item = localMasterData.get(strCode);
+      item.status = '受付済';
+      item.actualCount = actualCount;
+      localMasterData.set(strCode, item);
+      localStorage.setItem('localMasterData', JSON.stringify(Array.from(localMasterData.values())));
+      updateVisitorCounter(); // カウンター更新
+    }
+
+    pendingSyncQueue.push({ code: strCode, count: actualCount });
+    localStorage.setItem('pendingSyncQueue', JSON.stringify(pendingSyncQueue));
+
+    closeResultModal();
+    playBeepSound();
+
+    showAutoToast(
+      "✅ <span style='font-size:22px; font-weight:900; color:#ffffff; display:inline-block; margin-bottom:2px;'>" + currentData.nickname + " 様</span><br>" +
+      "<span style='font-size:19px; font-weight:900; color:#ffeb3b;'>" + count + "名で受付完了！</span>",
+      3000
+    );
+    clearKey();
+    toggleKeypadMode(false);
+
+    triggerBackgroundSync();
+  }
+
+  // バックグラウンド自動同期
+  function triggerBackgroundSync() {
+    if (pendingSyncQueue.length > 0 && !isSyncing) {
+      isSyncing = true;
+      updateSyncStatusUI('syncing', pendingSyncQueue.length);
+
+      const recordsToSend = [...pendingSyncQueue];
+      callGasApi(
+        { action: 'bulk_checkin', records: JSON.stringify(recordsToSend) },
+        function(res) {
+          isSyncing = false;
+          if (res && res.success) {
+            pendingSyncQueue.splice(0, recordsToSend.length);
+            localStorage.setItem('pendingSyncQueue', JSON.stringify(pendingSyncQueue));
+            console.log('🔄 バックグラウンド同期成功:', res.message);
+            
+            if (pendingSyncQueue.length === 0) {
+              updateSyncStatusUI('online', 0);
+            } else {
+              updateSyncStatusUI('offline', pendingSyncQueue.length);
+            }
+          } else {
+            updateSyncStatusUI('offline', pendingSyncQueue.length);
+          }
+        },
+        function(err) {
+          isSyncing = false;
+          console.warn('バックグラウンド同期通信保留（オフライン状態）');
+          updateSyncStatusUI('offline', pendingSyncQueue.length);
+        }
+      );
+    } else if (pendingSyncQueue.length === 0) {
+      updateSyncStatusUI('online', 0);
+    }
+  }
+
+  let toastTimer = null;
+  let toastFadeTimer = null;
+
+  function showAutoToast(msg, duration, isWarning, onClickCallback) {
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    if (toastFadeTimer) { clearTimeout(toastFadeTimer); toastFadeTimer = null; }
+
+    const oldToast = document.getElementById('autoToast');
+    if (oldToast) oldToast.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'autoToast';
+    toast.className = 'toast-popup' + (isWarning ? ' toast-warning' : '');
+    toast.innerHTML = msg;
+
+    if (typeof onClickCallback === 'function') {
+      toast.onclick = function() {
+        if (toastTimer) clearTimeout(toastTimer);
+        if (toastFadeTimer) clearTimeout(toastFadeTimer);
+        toast.remove();
+        onClickCallback();
+      };
+    }
+
+    document.body.appendChild(toast);
+    const displayTime = duration || 3000;
+
+    toastTimer = setTimeout(function() {
+      if (toast && toast.parentNode) {
+        toast.style.opacity = "0";
+        toastFadeTimer = setTimeout(function() {
+          if (toast && toast.parentNode) toast.remove();
+        }, 200);
+      }
+    }, displayTime);
+  }
+
+  // QRコード読み取り検知音（3136Hz 三角波 / 0.3秒）
+  function playScanBeep() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(3136, audioCtx.currentTime);
+      gain.gain.setValueAtTime(1.0, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } catch (e) {}
+  }
+
+  // 受付成功音（ピ・ローン♪）
+  function playBeepSound() {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      
+      const delay = 0.5;
+      const startTime = audioCtx.currentTime + delay;
+
+      const osc1_a = audioCtx.createOscillator();
+      const osc1_b = audioCtx.createOscillator();
+      const gain1 = audioCtx.createGain();
+      
+      osc1_a.type = 'sine'; osc1_a.frequency.setValueAtTime(1046.5, startTime);
+      osc1_b.type = 'sine'; osc1_b.frequency.setValueAtTime(1318.51, startTime);
+
+      gain1.gain.setValueAtTime(1.0, startTime);
+      gain1.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
+
+      osc1_a.connect(gain1); osc1_b.connect(gain1); gain1.connect(audioCtx.destination);
+      osc1_a.start(startTime); osc1_b.start(startTime);
+      osc1_a.stop(startTime + 0.12); osc1_b.stop(startTime + 0.12);
+
+      const osc2_a = audioCtx.createOscillator();
+      const osc2_b = audioCtx.createOscillator();
+      const gain2 = audioCtx.createGain();
+      const t2 = startTime + 0.09;
+
+      osc2_a.type = 'sine'; osc2_a.frequency.setValueAtTime(1567.98, t2);
+      osc2_b.type = 'sine'; osc2_b.frequency.setValueAtTime(2093.00, t2);
+
+      gain2.gain.setValueAtTime(1.0, t2);
+      gain2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.75);
+
+      osc2_a.connect(gain2); osc2_b.connect(gain2); gain2.connect(audioCtx.destination);
+      osc2_a.start(t2); osc2_b.start(t2);
+      osc2_a.stop(t2 + 0.75); osc2_b.stop(t2 + 0.75);
+    } catch (e) {}
+  }
+
+  function initCameraScanner() {
+    html5QrCode = new Html5Qrcode("reader");
+    const config = {
+      fps: 15,
+      qrbox: { width: 160, height: 160 },
+      aspectRatio: 1.33
+    };
+
+    html5QrCode.start(
+      { facingMode: currentFacingMode },
+      config,
+      function onScanSuccess(decodedText) {
+        const modal = document.getElementById('resultModal');
+        if (modal && modal.style.display === 'flex') return;
+
+        const code = extractCode(decodedText);
+        if (code && code !== lastScannedCode && !isLoading) {
+          lastScannedCode = code;
+          playScanBeep();
+          inputCode = code;
+          searchCode();
+          
+          if (scanCooldownTimer) clearTimeout(scanCooldownTimer);
+          scanCooldownTimer = setTimeout(function() {
+            lastScannedCode = "";
+          }, 2000);
+        }
+      },
+      function onScanError(errorMessage) {}
+    ).catch(function(err) {
+      console.error("Camera start error", err);
+    });
+  }
+
+  function toggleCameraFacing() {
+    if (!html5QrCode) return;
+    currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+    html5QrCode.stop().then(function() {
+      initCameraScanner();
+    }).catch(function() {
+      initCameraScanner();
+    });
+  }
+
+  function extractCode(text) {
+    if (!text) return "";
+    const match = text.match(/\b\d{5}\b/);
+    if (match) return match[0];
+    const cleaned = text.trim();
+    if (/^\d{5}\$/.test(cleaned)) return cleaned;
+    return text.substring(0, 5);
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    const startOverlay = document.getElementById('startOverlay');
+    const btnCloseGuide = document.getElementById('btnCloseGuide');
+
+    if (btnCloseGuide) {
+      btnCloseGuide.onclick = function() {
+        if (startOverlay) startOverlay.style.display = 'none';
+        initCameraScanner();
+      };
+    }
+
+    initLocalCache();
+    updateSyncStatusUI(pendingSyncQueue.length > 0 ? 'offline' : 'online', pendingSyncQueue.length);
+    
+    // 10秒ごとにサーバー同期＆最新マスターデータ取得で全端末のカウンターを同期
+    setInterval(function() {
+      triggerBackgroundSync();
+      fetchMasterData();
+    }, 10000);
+  });
+</script>
+
+</body>
+</html>
